@@ -1,0 +1,180 @@
+---
+title: "ElectricityProductionTimeSeries"
+author: "Subham Moda"
+date: "2024-06-12"
+output: html_document
+---
+
+```{r}
+library(TSA)
+library(tseries)
+```
+
+I've taken Electricity Production data for United States, which has monthly data for the amount of electricity produced in the US from 1985 to 2018. I will fit the data to a time series model and lastly predict the electric production for future years.
+
+```{r}
+s_data <- read.csv('/Users/subhammoda/Documents/Projects/MA641_Project/Electric_Production.csv')
+s_data$Value = as.numeric(s_data$Value)
+s_data$DATE = as.Date(s_data$DATE, "%m-%d-%Y")
+
+sf_data <- head(s_data, 396)
+sf_data <- ts(sf_data$Value, frequency = 12, start = c(1985, 1))
+head(sf_data)
+```
+
+```{r}
+plot.ts(sf_data, type = 'l', ylab = 'Electricity Produced', xlab = 'Month', main = "Electricity Produced in US")
+```
+
+```{r}
+acf(sf_data, main = "ACF of Electricity Produced Data", lag.max = 100)
+```
+
+```{r}
+pacf(sf_data, main = "PACF of Electricity Produced Data")
+```
+
+***Check for stationarity using Dicky-Fuller Test.***
+
+H0: The time series is non-stationary.
+
+H1: The time series is stationary.
+
+```{r}
+adf.test(sf_data)
+```
+
+***Since p-value is 0.01 \< 0.05, we reject H0, the data is stationary.***
+
+Since, we are unable to directly capture the seasonality in the data, we try to modify the data by taking difference of log of data.
+
+```{r}
+sf_data_l <- log(sf_data)
+acf(diff(sf_data_l), lag.max = 350, main = "ACF of diff(log(Electricity Produced Data))")
+```
+
+```{r}
+pacf(diff(sf_data_l),lag.max = 50, main = "PACF of diff(log(Electricity Produced Data))")
+```
+
+```{r}
+eacf(diff(sf_data_l))
+```
+
+```{r}
+plot(decompose(diff(sf_data_l)))
+```
+
+Based on the ACF, PACF and EACF, we test for the following 4 models:-
+
+1.  ARIMA(1,1,1)x(4,1,4)6
+2.  ARIMA(1,1,1)x(2,1,2)12
+3.  ARIMA(1,1,1)x(2,1,1)12
+4.  ARIMA(1,1,1)x(2,1,0)12
+
+#### *Model1 - ARIMA(1,1,1)x(4,1,4)6*
+
+```{r}
+model1 <- arima(sf_data_l, order= c(1,1,1), seasonal=list(order=c(4,1,4), period= 6))
+model1
+```
+
+```{r}
+AIC(model1)
+```
+
+```{r}
+BIC(model1)
+```
+
+#### *Model2 - ARIMA(1,1,1)x(2,1,2)12*
+
+```{r}
+model2 <- arima(sf_data_l, order= c(1,1,1), seasonal=list(order=c(2,1,2), period= 12))
+model2
+```
+
+```{r}
+AIC(model2)
+```
+
+```{r}
+BIC(model2)
+```
+
+#### *Model3 - ARIMA(1,1,1)x(2,1,1)12*
+
+```{r}
+model3 <- arima(sf_data_l, order= c(1,1,1), seasonal=list(order=c(2,1,1), period= 12))
+model3
+```
+
+```{r}
+AIC(model3)
+```
+
+```{r}
+BIC(model3)
+```
+
+#### *Model4 - ARIMA(1,1,1)x(2,1,0)12*
+
+```{r}
+model4 <- arima(sf_data_l, order= c(1,1,1), seasonal=list(order=c(2,1,0), period= 12))
+model4
+```
+
+```{r}
+AIC(model4)
+```
+
+```{r}
+BIC(model4)
+```
+
+#### *The best model for the above seasonal data is ARIMA(1,1,1)x(2,1,1)12 based on AIC and BIC values.*
+
+
+### Residual Analysis
+
+```{r}
+s_model <- arima(sf_data_l, order= c(1,1,1), seasonal=list(order=c(2,1,1), period= 12))
+acf(residuals(s_model), lag.max = 100, main = "ACF plot of residuals of ARIMA(1,1,1)x(2,1,1)12")
+```
+
+```{r}
+qqnorm(residuals(s_model), main = "Q-Q plot of residuals of ARIMA(1,1,1)x(2,1,1)12"); qqline(residuals(s_model))
+```
+
+```{r}
+hist(residuals(s_model), freq = FALSE, main = "Histogram plot of residuals of ARIMA(1,1,1)x(2,1,1)12")
+```
+
+```{r}
+shapiro.test(residuals(s_model))
+```
+
+***From the Shapiro-Wilk test, the p-value of 0.1569 \> 0.05, shows that the residual is normal.***
+
+```{r}
+Box.test(residuals(s_model), lag = 10, type = "Ljung-Box")
+```
+
+***The Box-Ljung test, having p-value 0.5455 \> 0.05, shows that the residuals are independent and identically distributed.***
+
+***Diagnostic plot of ARIMA(1,1,1)x(2,1,1)12***
+
+```{r}
+tsdiag(s_model, gof.lag = 20)
+```
+
+### Forecast
+
+```{r}
+model_s <- arima(sf_data, order= c(1,1,1), seasonal=list(order=c(2,1,1), period= 12))
+plot(model_s, n1=c(2015,1), n.ahead=24,ylab='Electricity Produced',pch=20, main = "Pot of Electricity Produced data along with two year forecast")
+```
+
+### Conclusion
+
+We can see that SARIMA(1,1,1)x(2,1,1)[12] is a great fit to the data, and is able to forecast the Electricity Production by capturing the seasonality trends.
